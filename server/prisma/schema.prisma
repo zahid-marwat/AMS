@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           String        // "ADMIN" or "TEACHER"
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  classes        Class[]       @relation("ClassTeacher")
+  refreshTokens  RefreshToken[]
+  attendanceRecords AttendanceRecord[] @relation("AttendanceRecorder")
+  teacherAttendance TeacherAttendance[]
+  attendanceDrafts  AttendanceDraft[]
+}
+
+model Class {
+  id           String           @id @default(cuid())
+  name         String
+  gradeLevel   String
+  teacherId    String?
+  teacher      User?            @relation("ClassTeacher", fields: [teacherId], references: [id])
+  students     Student[]
+  attendance   AttendanceRecord[]
+  drafts       AttendanceDraft[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model Student {
+  id         String            @id @default(cuid())
+  firstName  String
+  lastName   String
+  classId    String
+  class      Class             @relation(fields: [classId], references: [id])
+  attendance AttendanceRecord[]
+  drafts     AttendanceDraft[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+model AttendanceRecord {
+  id          String            @id @default(cuid())
+  studentId   String
+  classId     String
+  status      String            // "PRESENT", "ABSENT", "LATE", "LEAVE"
+  recordedBy  String
+  recordedAt  DateTime          @default(now())
+  date        DateTime
+  student     Student           @relation(fields: [studentId], references: [id])
+  class       Class             @relation(fields: [classId], references: [id])
+  teacher     User              @relation("AttendanceRecorder", fields: [recordedBy], references: [id])
+
+  @@unique([studentId, date])
+}
+
+model TeacherAttendance {
+  id          String   @id @default(cuid())
+  teacherId   String
+  status      String   // "PRESENT", "ABSENT", "LATE", "LEAVE"
+  date        DateTime
+  teacher     User     @relation(fields: [teacherId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([teacherId, date])
+}
+
+model AttendanceDraft {
+  id         String   @id @default(cuid())
+  teacherId  String
+  classId    String
+  studentId  String
+  status     String  // "PRESENT", "ABSENT", "LATE", "LEAVE"
+  date       DateTime
+  updatedAt  DateTime @updatedAt
+
+  teacher User    @relation(fields: [teacherId], references: [id])
+  class   Class   @relation(fields: [classId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([teacherId, classId, studentId, date])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
