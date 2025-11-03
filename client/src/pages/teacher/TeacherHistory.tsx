@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 import { Card } from '@/components/ui/Card';
-import { teacherService } from '@/services/teacher';
-import type { AttendanceSummary } from '@/types';
+import { teacherService, type TeacherAttendanceHistory } from '@/services/teacher';
 
 export default function TeacherHistoryPage() {
-  const { data: history = [] } = useQuery<AttendanceSummary[]>({
+  const { data: history, isLoading } = useQuery<TeacherAttendanceHistory>({
     queryKey: ['teacher-history'],
     queryFn: () => teacherService.getHistory({}),
   });
@@ -13,6 +12,25 @@ export default function TeacherHistoryPage() {
   return (
     <DashboardShell title="Attendance History" role="teacher">
       <Card title="Recent Attendance">
+        {isLoading && <p className="mb-4 text-sm text-slate-500">Loading history…</p>}
+        {history && (
+          <div className="mb-4 flex flex-wrap gap-4 text-sm">
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Period</p>
+              <p className="text-slate-700">
+                {history.range.startDate} – {history.range.endDate}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Total Present</p>
+              <p className="text-lg font-semibold text-slate-900">{history.totals.present}</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Total Absent</p>
+              <p className="text-lg font-semibold text-slate-900">{history.totals.absent}</p>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
@@ -35,7 +53,7 @@ export default function TeacherHistoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {history.map((entry: AttendanceSummary) => (
+              {history?.summaries.map((entry) => (
                 <tr key={entry.date} className="bg-white">
                   <td className="px-3 py-3 text-sm font-medium text-slate-900">{entry.date}</td>
                   <td className="px-3 py-3 text-sm text-slate-600">{entry.present}</td>
@@ -44,7 +62,7 @@ export default function TeacherHistoryPage() {
                   <td className="px-3 py-3 text-sm text-slate-600">{entry.leave}</td>
                 </tr>
               ))}
-              {!history.length && (
+              {!history?.summaries.length && !isLoading && (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
                     No attendance records yet.

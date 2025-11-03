@@ -35,6 +35,13 @@ export const authController = {
       }
 
       const result = await authService.refresh(refreshToken);
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
+
       res.json({ accessToken: result.accessToken });
     } catch (error) {
       next(error);

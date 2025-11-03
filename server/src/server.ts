@@ -7,6 +7,7 @@ import { config } from '@/config/env';
 import { errorHandler } from '@/middlewares/errorHandler';
 import authRoutes from '@/routes/authRoutes';
 import adminRoutes from '@/routes/adminRoutes';
+import teacherRoutes from '@/routes/teacherRoutes';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/teacher', teacherRoutes);
 
 // Error handling
 app.use(errorHandler);

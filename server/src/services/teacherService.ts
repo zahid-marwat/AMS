@@ -1,7 +1,9 @@
 import { differenceInCalendarDays, endOfDay, format, formatISO, isWithinInterval, startOfDay, subDays } from 'date-fns';
 import type { Prisma } from '@prisma/client';
+import { StatusCodes } from 'http-status-codes';
 import { prisma } from '@/lib/prisma';
 import { AttendanceStatus } from '@/types/enums';
+import { AppError } from '@/utils/appError';
 
 const ATTENDANCE_CUTOFF_DAYS = 7;
 
@@ -61,6 +63,8 @@ type ClassWithStudents = {
   gradeLevel?: string | null;
   students: StudentRow[];
 };
+
+type StudentRosterEntry = StudentRow & { classId: string };
 
 type AttendanceRecordRow = {
   id: string;
@@ -313,6 +317,7 @@ export const teacherService = {
     const date = startOfDay(new Date());
 
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const timestamp = new Date();
       for (const submission of submissions) {
         await tx.attendanceRecord.upsert({
           where: {
@@ -324,6 +329,7 @@ export const teacherService = {
           update: {
             status: toServerStatus(submission.status),
             recordedBy: teacherId,
+            recordedAt: timestamp,
           },
           create: {
             studentId: submission.studentId,
@@ -331,6 +337,7 @@ export const teacherService = {
             status: toServerStatus(submission.status),
             recordedBy: teacherId,
             date,
+            recordedAt: timestamp,
           },
         });
       }
@@ -790,5 +797,27 @@ export const teacherService = {
         attendanceRate,
       },
     };
+  },
+
+  async getClassStudents(teacherId: string, classId: string) {
+    const klass = (await prisma.class.findFirst({
+      where: { id: classId, teacherId },
+      include: {
+        students: {
+          orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        },
+      },
+    })) as (ClassWithStudents & { id: string }) | null;
+
+    if (!klass) {
+      throw new AppError('Class not found', StatusCodes.NOT_FOUND);
+    }
+
+    return klass.students.map<StudentRosterEntry>((student) => ({
+      id: student.id,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      classId: klass.id,
+    }));
   },
 };
