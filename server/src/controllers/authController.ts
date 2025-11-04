@@ -6,6 +6,7 @@ export const authController = {
     try {
       const { email, password } = req.body;
       const result = await authService.login(email, password);
+       
       
       // Set refresh token as httpOnly cookie
       // Note: In development, secure is set to false for localhost testing
