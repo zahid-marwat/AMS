@@ -1,5 +1,9 @@
 import { api } from './api';
-import type { AttendanceStatus, StudentRecord } from '@/types';
+import type {
+  AttendanceStatus,
+  StudentRecord,
+  StudentMonthlyAttendance,
+} from '@/types';
 import type { TeacherDashboardResponse } from '@/types/teacher';
 
 type SubmissionPayload = Array<{ studentId: string; status: AttendanceStatus }>;
@@ -25,6 +29,18 @@ export type TeacherAttendanceHistory = {
   };
 };
 
+export type TeacherAttendanceDetails = Array<{
+  classId: string;
+  className: string;
+  submissions: Array<{
+    studentId: string;
+    studentName: string;
+    rollNumber: string;
+    status: AttendanceStatus;
+  }>;
+  editable: boolean;
+}>;
+
 export const teacherService = {
   async getDashboard() {
     const { data } = await api.get<TeacherDashboardResponse>('/teacher/dashboard');
@@ -38,8 +54,10 @@ export const teacherService = {
     });
   },
 
-  async listStudents(classId: string) {
-    const { data } = await api.get<StudentRecord[]>(`/teacher/classes/${classId}/students`);
+  async listStudents(classId: string, params?: { month?: number; year?: number }) {
+    const { data } = await api.get<StudentRecord[]>(`/teacher/classes/${classId}/students`, {
+      params,
+    });
     return data;
   },
 
@@ -64,6 +82,20 @@ export const teacherService = {
 
   async getProfile() {
     const { data } = await api.get('/teacher/profile');
+    return data;
+  },
+
+  async getStudentMonthlyAttendance(studentId: string, params?: { month?: number; year?: number }) {
+    const { data } = await api.get<StudentMonthlyAttendance>(`/teacher/students/${studentId}/monthly`, {
+      params,
+    });
+    return data;
+  },
+
+  async getAttendanceDetails(date: string) {
+    const { data } = await api.get<TeacherAttendanceDetails>('/teacher/attendance/details', {
+      params: { date },
+    });
     return data;
   },
 };

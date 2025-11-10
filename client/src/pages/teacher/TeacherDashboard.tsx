@@ -238,6 +238,9 @@ export default function TeacherDashboardPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Roll #
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Student
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -256,6 +259,9 @@ export default function TeacherDashboardPage() {
                   const selectedStatus = draft[submission.studentId] ?? submission.status;
                   return (
                     <tr key={submission.studentId} className="bg-white">
+                      <td className="px-3 py-3 text-sm font-semibold text-slate-900">
+                        {submission.rollNumber}
+                      </td>
                       <td className="px-3 py-3 text-sm font-semibold text-slate-900">
                         <div className="flex flex-col">
                           <span>{submission.studentName}</span>
@@ -291,7 +297,7 @@ export default function TeacherDashboardPage() {
                 })}
                 {!submissions.length && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
                       No students assigned to this class yet.
                     </td>
                   </tr>

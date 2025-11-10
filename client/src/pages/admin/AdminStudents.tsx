@@ -12,7 +12,7 @@ export default function AdminStudentsPage() {
   const [classFilter, setClassFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
-  const [formData, setFormData] = useState({ firstName: '', lastName: '', classId: '' });
+  const [formData, setFormData] = useState({ firstName: '', lastName: '', classId: '', rollNumber: '' });
   const queryClient = useQueryClient();
 
   const { data: students = [] } = useQuery<StudentRecord[]>({
@@ -54,7 +54,8 @@ export default function AdminStudentsPage() {
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     return students.filter((student: StudentRecord) => {
-      const matchesSearch = `${student.firstName} ${student.lastName}`.toLowerCase().includes(term);
+      const matchesSearch = `${student.firstName} ${student.lastName}`.toLowerCase().includes(term)
+        || student.rollNumber.toLowerCase().includes(term);
       const matchesClass = !classFilter || student.classId === classFilter;
       return matchesSearch && matchesClass;
     });
@@ -63,12 +64,12 @@ export default function AdminStudentsPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingStudent(null);
-    setFormData({ firstName: '', lastName: '', classId: '' });
+    setFormData({ firstName: '', lastName: '', classId: '', rollNumber: '' });
   };
 
   const openCreateModal = () => {
     setEditingStudent(null);
-    setFormData({ firstName: '', lastName: '', classId: '' });
+    setFormData({ firstName: '', lastName: '', classId: '', rollNumber: '' });
     setIsModalOpen(true);
   };
 
@@ -78,13 +79,14 @@ export default function AdminStudentsPage() {
       firstName: student.firstName,
       lastName: student.lastName,
       classId: student.classId,
+      rollNumber: student.rollNumber,
     });
     setIsModalOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.firstName && formData.lastName && formData.classId) {
+    if (formData.firstName && formData.lastName && formData.classId && formData.rollNumber) {
       if (editingStudent) {
         updateMutation.mutate({ id: editingStudent.id, data: formData });
       } else {
@@ -136,6 +138,9 @@ export default function AdminStudentsPage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Roll #
+                </th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Student
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -149,6 +154,9 @@ export default function AdminStudentsPage() {
             <tbody className="divide-y divide-slate-200">
               {filtered.map((student: StudentRecord) => (
                 <tr key={student.id} className="bg-white">
+                  <td className="px-3 py-3 text-sm font-semibold text-slate-900">
+                    {student.rollNumber}
+                  </td>
                   <td className="px-3 py-3 text-sm font-medium text-slate-900">
                     {student.firstName} {student.lastName}
                   </td>
@@ -171,7 +179,7 @@ export default function AdminStudentsPage() {
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={3} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">
                     No students found.
                   </td>
                 </tr>
@@ -244,6 +252,18 @@ export default function AdminStudentsPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Roll Number
+            </label>
+            <input
+              type="text"
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+              value={formData.rollNumber}
+              onChange={(e) => setFormData({ ...formData, rollNumber: e.target.value })}
+            />
           </div>
         </form>
       </Modal>

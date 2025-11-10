@@ -74,6 +74,10 @@ export const authService = {
       return cachedUser;
     }
 
+    if (!accessToken) {
+      return null;
+    }
+
     try {
       const { data } = await api.get<AuthUser>('/auth/me');
       if (accessToken) {

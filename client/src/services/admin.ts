@@ -68,18 +68,23 @@ export const adminService = {
     await api.delete(`/admin/classes/${classId}`);
   },
 
-  async createStudent(payload: { firstName: string; lastName: string; classId: string }) {
+  async createStudent(payload: { firstName: string; lastName: string; classId: string; rollNumber: string }) {
     const { data } = await api.post<StudentRecord>('/admin/students', payload);
     return data;
   },
 
-  async updateStudent(studentId: string, payload: { firstName?: string; lastName?: string; classId?: string }) {
+  async updateStudent(studentId: string, payload: { firstName?: string; lastName?: string; classId?: string; rollNumber?: string }) {
     const { data } = await api.put<StudentRecord>(`/admin/students/${studentId}`, payload);
     return data;
   },
 
-  async createTeacher(payload: { firstName: string; lastName: string; email: string; password: string }) {
+  async createTeacher(payload: { firstName: string; lastName: string; email: string; password: string; classId?: string | null }) {
     const { data } = await api.post<{ id: string; firstName: string; lastName: string; email: string; role: string }>('/admin/teachers', payload);
+    return data;
+  },
+
+  async updateTeacher(teacherId: string, payload: { firstName?: string; lastName?: string; email?: string; password?: string; classId?: string | null }) {
+    const { data } = await api.put<TeacherAccount>(`/admin/teachers/${teacherId}`, payload);
     return data;
   },
 

@@ -22,10 +22,30 @@ export interface StudentRecord {
   id: string;
   firstName: string;
   lastName: string;
+  rollNumber: string;
   classId: string;
+  monthlySummary?: StudentMonthlySummary;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave';
+
+export interface StudentMonthlySummary {
+  present: number;
+  absent: number;
+  late: number;
+  leave: number;
+  total: number;
+}
+
+export interface StudentMonthlyAttendance {
+  student: Pick<StudentRecord, 'id' | 'firstName' | 'lastName' | 'rollNumber' | 'classId'>;
+  range: {
+    startDate: string;
+    endDate: string;
+  };
+  summary: StudentMonthlySummary;
+  days: Array<{ date: string; status: AttendanceStatus | null }>;
+}
 
 export interface AttendanceEntry {
   id: string;

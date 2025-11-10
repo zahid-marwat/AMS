@@ -95,6 +95,16 @@ export const adminController = {
     }
   },
 
+  async updateTeacher(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { teacherId } = req.params;
+      const updatedTeacher = await adminService.updateTeacher(teacherId, req.body);
+      res.json(updatedTeacher);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async deleteStudent(req: Request, res: Response, next: NextFunction) {
     try {
       const { studentId } = req.params;

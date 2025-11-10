@@ -1,7 +1,33 @@
 import { subDays, formatISO } from 'date-fns';
+import { StatusCodes } from 'http-status-codes';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { AttendanceStatus, Role } from '@/types/enums';
 import { hashPassword } from '@/utils/password';
+import { AppError } from '@/utils/appError';
+
+const TEACHER_WITH_CLASSES_INCLUDE = {
+  classes: {
+    include: {
+      students: true,
+    },
+  },
+} as const;
+
+type TeacherWithClasses = Prisma.UserGetPayload<{ include: typeof TEACHER_WITH_CLASSES_INCLUDE }>;
+
+const formatTeacherAccount = (teacher: TeacherWithClasses) => ({
+  id: teacher.id,
+  firstName: teacher.firstName,
+  lastName: teacher.lastName,
+  email: teacher.email,
+  assignedClasses: teacher.classes.map((klass) => ({
+    id: klass.id,
+    name: klass.name,
+    gradeLevel: klass.gradeLevel,
+    studentCount: klass.students.length,
+  })),
+});
 
 // Helper function to get weekdays only (Monday to Friday)
 function getWeekdaysBack(fromDate: Date, count: number): Date {
@@ -126,52 +152,89 @@ export const adminService = {
     }));
   },
 
-  listStudents() {
-    return prisma.student.findMany({
+  async listStudents() {
+    const students = await prisma.student.findMany({
       include: {
         class: true,
       },
-      orderBy: { lastName: 'asc' },
+      orderBy: [
+        { class: { gradeLevel: 'asc' } },
+        { lastName: 'asc' },
+        { firstName: 'asc' },
+      ],
+    });
+
+    const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+    return students.sort((a, b) => {
+      if (a.class?.gradeLevel !== b.class?.gradeLevel) {
+        const left = a.class?.gradeLevel ?? '';
+        const right = b.class?.gradeLevel ?? '';
+        return collator.compare(left, right);
+      }
+
+      return collator.compare(a.rollNumber, b.rollNumber);
     });
   },
 
   async listTeachers() {
     const teachers = await prisma.user.findMany({
       where: { role: Role.TEACHER },
-      include: { 
-        classes: {
-          include: {
-            students: true
-          }
-        }
-      },
+      include: TEACHER_WITH_CLASSES_INCLUDE,
       orderBy: { lastName: 'asc' },
     });
 
-    type TeacherWithClasses = (typeof teachers)[number];
-
-    return teachers.map((teacher: TeacherWithClasses) => ({
-      id: teacher.id,
-      firstName: teacher.firstName,
-      lastName: teacher.lastName,
-      email: teacher.email,
-      assignedClasses: teacher.classes.map((klass: TeacherWithClasses['classes'][number]) => ({
-        id: klass.id,
-        name: klass.name,
-        gradeLevel: klass.gradeLevel,
-        studentCount: klass.students.length,
-      })),
-    }));
+    return teachers.map(formatTeacherAccount);
   },
 
-  async recordClass(payload: { name: string; gradeLevel: string; teacherId?: string | null }) {
-    return prisma.class.create({ data: payload });
+  async recordClass(payload: { name?: string; gradeLevel: string; teacherId?: string | null }) {
+    const gradeLevel = payload.gradeLevel.trim();
+    const existing = await prisma.class.findFirst({
+      where: {
+        gradeLevel,
+      },
+    });
+
+    if (existing) {
+      throw new AppError('A class already exists for this grade level.', StatusCodes.CONFLICT);
+    }
+
+    return prisma.class.create({
+      data: {
+        name: gradeLevel,
+        gradeLevel,
+        teacherId: payload.teacherId ?? null,
+      },
+    });
   },
 
-  async updateClass(classId: string, payload: { name?: string; gradeLevel?: string; teacherId?: string | null }) {
+  async updateClass(classId: string, payload: { gradeLevel?: string; teacherId?: string | null }) {
+    const data: { gradeLevel?: string; name?: string; teacherId?: string | null } = {};
+
+    if (payload.gradeLevel) {
+      const gradeLevel = payload.gradeLevel.trim();
+      const existing = await prisma.class.findFirst({
+        where: {
+          id: { not: classId },
+          gradeLevel,
+        },
+      });
+
+      if (existing) {
+        throw new AppError('Another class already exists for this grade level.', StatusCodes.CONFLICT);
+      }
+
+      data.gradeLevel = gradeLevel;
+      data.name = gradeLevel;
+    }
+
+    if (payload.teacherId !== undefined) {
+      data.teacherId = payload.teacherId || null;
+    }
+
     return prisma.class.update({
       where: { id: classId },
-      data: payload,
+      data,
       include: {
         teacher: true,
         students: true,
@@ -188,38 +251,173 @@ export const adminService = {
     return prisma.class.delete({ where: { id: classId } });
   },
 
-  async createStudent(payload: { firstName: string; lastName: string; classId: string }) {
-    return prisma.student.create({ data: payload });
+  async createStudent(payload: { firstName: string; lastName: string; classId: string; rollNumber: string }) {
+    const data = {
+      firstName: payload.firstName.trim(),
+      lastName: payload.lastName.trim(),
+      classId: payload.classId,
+      rollNumber: payload.rollNumber.trim(),
+    };
+
+    if (!data.rollNumber) {
+      throw new AppError('Roll number is required', StatusCodes.BAD_REQUEST);
+    }
+
+    return prisma.student.create({ data });
   },
 
-  async updateStudent(studentId: string, payload: { firstName?: string; lastName?: string; classId?: string }) {
+  async updateStudent(studentId: string, payload: { firstName?: string; lastName?: string; classId?: string; rollNumber?: string }) {
+    const data: { firstName?: string; lastName?: string; classId?: string; rollNumber?: string } = {};
+
+    if (payload.firstName !== undefined) {
+      data.firstName = payload.firstName.trim();
+    }
+
+    if (payload.lastName !== undefined) {
+      data.lastName = payload.lastName.trim();
+    }
+
+    if (payload.classId !== undefined) {
+      data.classId = payload.classId;
+    }
+
+    if (payload.rollNumber !== undefined) {
+      const rollNumber = payload.rollNumber.trim();
+      if (!rollNumber) {
+        throw new AppError('Roll number is required', StatusCodes.BAD_REQUEST);
+      }
+      data.rollNumber = rollNumber;
+    }
+
     return prisma.student.update({
       where: { id: studentId },
-      data: payload,
+      data,
       include: {
         class: true,
       },
     });
   },
 
-  async createTeacher(payload: { firstName: string; lastName: string; email: string; password: string }) {
-    const passwordHash = await hashPassword(payload.password);
-    
-    return prisma.user.create({
-      data: {
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        email: payload.email,
-        passwordHash: passwordHash,
-        role: Role.TEACHER,
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-      },
+  async createTeacher(payload: { firstName: string; lastName: string; email: string; password: string; classId?: string | null }) {
+    return prisma.$transaction(async (tx) => {
+      const firstName = payload.firstName.trim();
+      const lastName = payload.lastName.trim();
+      const email = payload.email.trim();
+      const passwordHash = await hashPassword(payload.password);
+
+      const teacher = await tx.user.create({
+        data: {
+          firstName,
+          lastName,
+          email,
+          passwordHash,
+          role: Role.TEACHER,
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+        },
+      });
+
+      if (payload.classId) {
+        const klass = await tx.class.findUnique({ where: { id: payload.classId } });
+        if (!klass) {
+          throw new AppError('Selected class not found.', StatusCodes.NOT_FOUND);
+        }
+
+        await tx.class.update({
+          where: { id: klass.id },
+          data: { teacherId: teacher.id },
+        });
+      }
+
+      return teacher;
+    });
+  },
+
+  async updateTeacher(
+    teacherId: string,
+    payload: { firstName?: string; lastName?: string; email?: string; password?: string; classId?: string | null },
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const teacher = await tx.user.findFirst({
+        where: { id: teacherId, role: Role.TEACHER },
+      });
+
+      if (!teacher) {
+        throw new AppError('Teacher not found.', StatusCodes.NOT_FOUND);
+      }
+
+      const data: Prisma.UserUpdateInput = {};
+
+      if (payload.firstName !== undefined) {
+        const firstName = payload.firstName.trim();
+        if (!firstName) {
+          throw new AppError('First name is required.', StatusCodes.BAD_REQUEST);
+        }
+        data.firstName = firstName;
+      }
+
+      if (payload.lastName !== undefined) {
+        const lastName = payload.lastName.trim();
+        if (!lastName) {
+          throw new AppError('Last name is required.', StatusCodes.BAD_REQUEST);
+        }
+        data.lastName = lastName;
+      }
+
+      if (payload.email !== undefined) {
+        const email = payload.email.trim();
+        if (!email) {
+          throw new AppError('Email is required.', StatusCodes.BAD_REQUEST);
+        }
+        data.email = email;
+      }
+
+      if (payload.password) {
+        data.passwordHash = await hashPassword(payload.password);
+      }
+
+      if (Object.keys(data).length > 0) {
+        await tx.user.update({
+          where: { id: teacherId },
+          data,
+        });
+      }
+
+      if (payload.classId !== undefined) {
+        await tx.class.updateMany({
+          where: { teacherId },
+          data: { teacherId: null },
+        });
+
+        const targetClassId = payload.classId?.trim();
+        if (targetClassId) {
+          const klass = await tx.class.findUnique({ where: { id: targetClassId } });
+          if (!klass) {
+            throw new AppError('Selected class not found.', StatusCodes.NOT_FOUND);
+          }
+
+          await tx.class.update({
+            where: { id: targetClassId },
+            data: { teacherId },
+          });
+        }
+      }
+
+      const updatedTeacher = await tx.user.findUnique({
+        where: { id: teacherId },
+        include: TEACHER_WITH_CLASSES_INCLUDE,
+      });
+
+      if (!updatedTeacher) {
+        throw new AppError('Teacher not found after update.', StatusCodes.NOT_FOUND);
+      }
+
+      return formatTeacherAccount(updatedTeacher);
     });
   },
 

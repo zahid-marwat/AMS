@@ -10,6 +10,15 @@ const ensureTeacherId = (req: Request<any, any, any, any>): string => {
   return req.userId;
 };
 
+const parseQueryNumber = (value?: string): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
 type SubmissionPayload = Array<{ studentId: string; status: string }>;
 
 type HistoryQuery = {
@@ -19,6 +28,11 @@ type HistoryQuery = {
 
 type DetailsQuery = {
   date?: string;
+};
+
+type MonthYearQuery = {
+  month?: string;
+  year?: string;
 };
 
 export const teacherController = {
@@ -177,17 +191,42 @@ export const teacherController = {
     }
   },
 
-  async listClassStudents(req: Request, res: Response, next: NextFunction) {
+  async listClassStudents(req: Request<unknown, unknown, unknown, MonthYearQuery>, res: Response, next: NextFunction) {
     try {
       const teacherId = ensureTeacherId(req);
       const { classId } = req.params as { classId?: string };
+      const { month, year } = req.query ?? {};
 
       if (!classId) {
         throw new AppError('classId is required', StatusCodes.BAD_REQUEST);
       }
 
-      const students = await teacherService.getClassStudents(teacherId, classId);
+      const students = await teacherService.getClassStudents(teacherId, classId, {
+        month: parseQueryNumber(month),
+        year: parseQueryNumber(year),
+      });
       res.json(students);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getStudentMonthlyAttendance(req: Request<{ studentId?: string }, unknown, unknown, MonthYearQuery>, res: Response, next: NextFunction) {
+    try {
+      const teacherId = ensureTeacherId(req);
+      const { studentId } = req.params ?? {};
+      const { month, year } = req.query ?? {};
+
+      if (!studentId) {
+        throw new AppError('studentId is required', StatusCodes.BAD_REQUEST);
+      }
+
+      const data = await teacherService.getStudentMonthlyAttendance(teacherId, studentId, {
+        month: parseQueryNumber(month),
+        year: parseQueryNumber(year),
+      });
+
+      res.json(data);
     } catch (error) {
       next(error);
     }

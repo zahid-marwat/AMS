@@ -29,6 +29,7 @@ router.delete('/students/:studentId', adminController.deleteStudent);
 // Teachers management
 router.get('/teachers', adminController.listTeachers);
 router.post('/teachers', adminController.createTeacher);
+router.put('/teachers/:teacherId', adminController.updateTeacher);
 router.get('/teachers/:teacherId/detail', adminController.getTeacherDetail);
 
 export default router;

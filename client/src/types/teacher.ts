@@ -5,6 +5,7 @@ type AttendanceStage = 'submitted' | 'draft' | 'pending' | 'no-class';
 type DashboardSubmission = {
   studentId: string;
   studentName: string;
+  rollNumber: string;
   status: AttendanceStatus;
   hasRecord: boolean;
   isDraft: boolean;

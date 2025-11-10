@@ -1,4 +1,15 @@
-import { differenceInCalendarDays, endOfDay, format, formatISO, isWithinInterval, startOfDay, subDays } from 'date-fns';
+import {
+  differenceInCalendarDays,
+  eachDayOfInterval,
+  endOfDay,
+  endOfMonth,
+  format,
+  formatISO,
+  isWithinInterval,
+  startOfDay,
+  startOfMonth,
+  subDays,
+} from 'date-fns';
 import type { Prisma } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import { prisma } from '@/lib/prisma';
@@ -12,6 +23,7 @@ type ClientAttendanceStatus = 'present' | 'absent' | 'late' | 'leave';
 type DashboardSubmission = {
   studentId: string;
   studentName: string;
+  rollNumber: string;
   status: ClientAttendanceStatus;
   hasRecord: boolean;
   isDraft: boolean;
@@ -55,6 +67,7 @@ type StudentRow = {
   id: string;
   firstName: string;
   lastName: string;
+  rollNumber: string;
 };
 
 type ClassWithStudents = {
@@ -63,8 +76,6 @@ type ClassWithStudents = {
   gradeLevel?: string | null;
   students: StudentRow[];
 };
-
-type StudentRosterEntry = StudentRow & { classId: string };
 
 type AttendanceRecordRow = {
   id: string;
@@ -98,6 +109,43 @@ const STATUS_MAP: Record<string, AttendanceStatus> = {
   LEAVE: 'LEAVE',
 };
 
+const rollNumberCollator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+function normalizeStudents<T extends { id: string; firstName: string; lastName: string; rollNumber: string }>(
+  rawStudents: T[],
+): StudentRow[] {
+  return rawStudents
+    .map((student) => ({
+      id: student.id,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      rollNumber: student.rollNumber,
+    }))
+    .sort((a, b) => rollNumberCollator.compare(a.rollNumber, b.rollNumber));
+}
+
+function formatClassWithStudents<T extends {
+  id: string;
+  name: string;
+  gradeLevel?: string | null;
+  students: Array<{ id: string; firstName: string; lastName: string; rollNumber: string }>;
+}>(klass: T): ClassWithStudents {
+  return {
+    id: klass.id,
+    name: klass.name,
+    gradeLevel: klass.gradeLevel,
+    students: normalizeStudents(klass.students),
+  };
+}
+
+type StudentMonthlySummary = {
+  present: number;
+  absent: number;
+  late: number;
+  leave: number;
+  total: number;
+};
+
 function convertStatus(status: string): ClientAttendanceStatus {
   switch (status) {
     case 'PRESENT':
@@ -119,7 +167,7 @@ function toServerStatus(status: string): AttendanceStatus {
 }
 
 async function getPrimaryClass(teacherId: string): Promise<ClassWithStudents | null> {
-  const classes = (await prisma.class.findMany({
+  const classes = await prisma.class.findMany({
     where: { teacherId },
     include: {
       students: {
@@ -127,13 +175,13 @@ async function getPrimaryClass(teacherId: string): Promise<ClassWithStudents | n
       },
     },
     orderBy: { name: 'asc' },
-  })) as ClassWithStudents[];
+  });
 
   if (!classes.length) {
     return null;
   }
 
-  return classes[0];
+  return formatClassWithStudents(classes[0]);
 }
 
 export const teacherService = {
@@ -203,7 +251,7 @@ export const teacherService = {
       leave: 0,
     };
 
-    const submissions = primaryClass.students.map((student: StudentRow) => {
+    const submissions = primaryClass.students.map((student) => {
       const record = recordMap.get(student.id);
       const draft = draftMap.get(student.id);
       const status = record
@@ -219,6 +267,7 @@ export const teacherService = {
       return {
         studentId: student.id,
         studentName: `${student.firstName} ${student.lastName}`,
+        rollNumber: student.rollNumber,
         status,
         hasRecord: Boolean(record),
         isDraft: Boolean(!record && draft),
@@ -432,23 +481,25 @@ export const teacherService = {
   },
 
   async getAttendanceDetails(teacherId: string, date: Date) {
-    const classes = (await prisma.class.findMany({
+    const classes = await prisma.class.findMany({
       where: { teacherId },
       include: {
         students: {
           orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
         },
       },
-    })) as Array<ClassWithStudents>;
+    });
 
     if (!classes.length) {
       return [];
     }
 
+    const formattedClasses = classes.map(formatClassWithStudents);
+
     const start = startOfDay(date);
     const end = endOfDay(date);
 
-    const records = (await prisma.attendanceRecord.findMany({
+    const records = await prisma.attendanceRecord.findMany({
       where: {
         classId: { in: classes.map((klass) => klass.id) },
         date: {
@@ -456,20 +507,22 @@ export const teacherService = {
           lte: end,
         },
       },
-    })) as AttendanceRecordRow[];
+    });
 
+    const typedRecords = records as AttendanceRecordRow[];
     const recordMap = new Map<string, AttendanceRecordRow>(
-      records.map((record: AttendanceRecordRow) => [record.studentId, record]),
+      typedRecords.map((record) => [record.studentId, record]),
     );
 
-    return classes.map((klass: ClassWithStudents) => ({
+    return formattedClasses.map((klass) => ({
       classId: klass.id,
       className: klass.name,
-      submissions: klass.students.map((student: StudentRow) => {
+      submissions: klass.students.map((student) => {
         const record = recordMap.get(student.id);
         return {
           studentId: student.id,
           studentName: `${student.firstName} ${student.lastName}`,
+          rollNumber: student.rollNumber,
           status: record ? convertStatus(record.status) : 'present',
         };
       }),
@@ -509,12 +562,12 @@ export const teacherService = {
   },
 
   async getStudentInsights(teacherId: string) {
-    const classes = (await prisma.class.findMany({
+    const classes = await prisma.class.findMany({
       where: { teacherId },
       include: {
         students: true,
       },
-    })) as Array<ClassWithStudents>;
+    });
 
     if (!classes.length) {
       return {
@@ -527,14 +580,14 @@ export const teacherService = {
       };
     }
 
-    const students = classes.flatMap((klass: ClassWithStudents) =>
-      klass.students.map((student: StudentRow) => ({ ...student, className: klass.name })),
+    const students = classes.flatMap((klass) =>
+      klass.students.map((student) => ({ ...student, className: klass.name })),
     );
 
     const start = subDays(startOfDay(new Date()), 29);
     const end = endOfDay(new Date());
 
-    const records = (await prisma.attendanceRecord.findMany({
+    const records = await prisma.attendanceRecord.findMany({
       where: {
         studentId: { in: students.map((student) => student.id) },
         date: {
@@ -543,11 +596,13 @@ export const teacherService = {
         },
       },
       orderBy: { date: 'asc' },
-    })) as AttendanceRecordRow[];
+    });
+
+    const typedRecords = records as AttendanceRecordRow[];
 
     const studentRecords = new Map<string, AttendanceRecordRow[]>();
 
-    for (const record of records) {
+    for (const record of typedRecords) {
       if (!studentRecords.has(record.studentId)) {
         studentRecords.set(record.studentId, []);
       }
@@ -786,7 +841,7 @@ export const teacherService = {
         name: `${teacher.firstName} ${teacher.lastName}`,
         email: teacher.email,
       },
-      classes: teacher.classes.map((klass: { id: string; name: string; gradeLevel?: string | null; students: StudentRow[] }) => ({
+      classes: teacher.classes.map((klass) => ({
         id: klass.id,
         name: klass.name,
         gradeLevel: klass.gradeLevel,
@@ -799,25 +854,158 @@ export const teacherService = {
     };
   },
 
-  async getClassStudents(teacherId: string, classId: string) {
-    const klass = (await prisma.class.findFirst({
+  async getClassStudents(
+    teacherId: string,
+    classId: string,
+    params?: { month?: number; year?: number }
+  ) {
+    const klassRecord = await prisma.class.findFirst({
       where: { id: classId, teacherId },
       include: {
         students: {
           orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
         },
       },
-    })) as (ClassWithStudents & { id: string }) | null;
+    });
 
-    if (!klass) {
+    if (!klassRecord) {
       throw new AppError('Class not found', StatusCodes.NOT_FOUND);
     }
 
-    return klass.students.map<StudentRosterEntry>((student) => ({
+    const klass = formatClassWithStudents(klassRecord);
+
+    const today = new Date();
+    const targetMonth = params?.month
+      ? new Date((params.year ?? today.getFullYear()), params.month - 1, 1)
+      : params?.year
+        ? new Date(params.year, today.getMonth(), 1)
+        : today;
+    const start = startOfMonth(targetMonth);
+    const end = endOfMonth(targetMonth);
+
+    const records = (await prisma.attendanceRecord.findMany({
+      where: {
+        classId: klass.id,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+      select: {
+        studentId: true,
+        status: true,
+      },
+    })) as Array<{ studentId: string; status: string }>;
+
+    const summaryMap = new Map<string, StudentMonthlySummary>();
+
+    for (const record of records) {
+      const converted = convertStatus(record.status);
+      if (!summaryMap.has(record.studentId)) {
+        summaryMap.set(record.studentId, {
+          present: 0,
+          absent: 0,
+          late: 0,
+          leave: 0,
+          total: 0,
+        });
+      }
+      const summary = summaryMap.get(record.studentId)!;
+      summary[converted] += 1;
+      summary.total += 1;
+    }
+
+    return klass.students.map<{ id: string; firstName: string; lastName: string; rollNumber: string; classId: string; monthlySummary: StudentMonthlySummary }>((student) => ({
       id: student.id,
       firstName: student.firstName,
       lastName: student.lastName,
+      rollNumber: student.rollNumber,
       classId: klass.id,
+      monthlySummary:
+        summaryMap.get(student.id) ?? {
+          present: 0,
+          absent: 0,
+          late: 0,
+          leave: 0,
+          total: 0,
+        },
     }));
+  },
+
+  async getStudentMonthlyAttendance(
+    teacherId: string,
+    studentId: string,
+    params?: { month?: number; year?: number }
+  ) {
+    const student = (await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        class: true,
+      },
+    })) as (StudentRow & { classId: string; class: { teacherId: string } }) | null;
+
+    if (!student || student.class.teacherId !== teacherId) {
+      throw new AppError('Student not found', StatusCodes.NOT_FOUND);
+    }
+
+    const today = new Date();
+    const targetMonth = params?.month
+      ? new Date((params.year ?? today.getFullYear()), params.month - 1, 1)
+      : params?.year
+        ? new Date(params.year, today.getMonth(), 1)
+        : today;
+    const start = startOfMonth(targetMonth);
+    const end = endOfMonth(targetMonth);
+
+    const records = (await prisma.attendanceRecord.findMany({
+      where: {
+        studentId,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+      orderBy: { date: 'asc' },
+    })) as AttendanceRecordRow[];
+
+    const summary: StudentMonthlySummary = {
+      present: 0,
+      absent: 0,
+      late: 0,
+      leave: 0,
+      total: 0,
+    };
+
+    const recordMap = new Map<string, ClientAttendanceStatus>();
+    for (const record of records) {
+      const converted = convertStatus(record.status);
+      recordMap.set(formatISO(record.date, { representation: 'date' }), converted);
+      summary[converted] += 1;
+      summary.total += 1;
+    }
+
+    const days = eachDayOfInterval({ start, end }).map((date) => {
+      const key = formatISO(date, { representation: 'date' });
+      return {
+        date: key,
+        status: recordMap.get(key) ?? null,
+      };
+    });
+
+    return {
+      student: {
+        id: student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        rollNumber: student.rollNumber,
+        classId: student.classId,
+      },
+      range: {
+        startDate: formatISO(start, { representation: 'date' }),
+        endDate: formatISO(end, { representation: 'date' }),
+      },
+      summary,
+      days,
+    };
   },
 };

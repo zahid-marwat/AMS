@@ -19,9 +19,18 @@ export const authService = {
       throw new AppError('Invalid credentials', StatusCodes.UNAUTHORIZED);
     }
 
-    const accessToken = signAccessToken({ sub: user.id, role: user.role });
-    const refreshToken = signRefreshToken({ sub: user.id, role: user.role });
+    const accessToken = signAccessToken({ sub: user.id, role: user.role as 'ADMIN' | 'TEACHER' });
+    const refreshToken = signRefreshToken({ sub: user.id, role: user.role as 'ADMIN' | 'TEACHER' });
     const decoded = jwt.decode(refreshToken) as jwt.JwtPayload;
+
+    let assignedClassIds: string[] | undefined;
+    if (user.role === Role.TEACHER) {
+      const classes = await prisma.class.findMany({
+        where: { teacherId: user.id },
+        select: { id: true },
+      });
+      assignedClassIds = classes.map((klass) => klass.id);
+    }
 
     await prisma.refreshToken.create({
       data: {
@@ -38,6 +47,7 @@ export const authService = {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        assignedClassIds,
       },
       accessToken,
       refreshToken,

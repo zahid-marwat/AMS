@@ -40,12 +40,15 @@ model Student {
   id         String            @id @default(cuid())
   firstName  String
   lastName   String
+  rollNumber String
   classId    String
   class      Class             @relation(fields: [classId], references: [id])
   attendance AttendanceRecord[]
   drafts     AttendanceDraft[]
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
+
+  @@unique([classId, rollNumber])
 }
 
 model AttendanceRecord {
