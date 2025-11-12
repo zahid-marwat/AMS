@@ -1,7 +1,30 @@
 import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { existsSync } from 'fs';
 
-loadEnv();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const candidateEnvPaths = [
+  path.resolve(__dirname, '../../.env'),      // server/.env
+  path.resolve(__dirname, '../../../.env'),   // repo root .env (if present)
+];
+
+let envLoaded = false;
+
+for (const envPath of candidateEnvPaths) {
+  if (existsSync(envPath)) {
+    loadEnv({ path: envPath, override: false });
+    envLoaded = true;
+  }
+}
+
+if (!envLoaded) {
+  // Fall back to default lookup (useful for environments that inject variables directly).
+  loadEnv();
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
