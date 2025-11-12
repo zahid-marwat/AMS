@@ -31,6 +31,19 @@ if not exist "%ROOT%node_modules" (
 	echo Dependencies already installed. Skipping npm install.
 )
 
+if not exist "%ROOT%server\.env" (
+	echo Creating server\.env from template...
+	if exist "%ROOT%server\.env.example" (
+		copy /Y "%ROOT%server\.env.example" "%ROOT%server\.env" >nul
+		echo [INFO] Generated server\.env. Review the secrets before running in production.
+	) else (
+		echo [ERROR] server\.env is missing and no template was found.
+		goto :error
+	)
+) else (
+	echo Found existing server\.env.
+)
+
 echo Starting AMS backend...
 start "AMS Backend" pwsh -NoExit -Command "cd '%ROOT%'; npm run dev --workspace server"
 
