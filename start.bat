@@ -31,6 +31,11 @@ if not exist "%ROOT%node_modules" (
 	echo Dependencies already installed. Skipping npm install.
 )
 
+
+set "DB_PATH=%ROOT%server\prisma\dev.db"
+set "NEED_SEED=0"
+if not exist "%DB_PATH%" set "NEED_SEED=1"
+
 if not exist "%ROOT%server\node_modules\.prisma\client\index.js" (
 	echo Generating Prisma client...
 	pushd "%ROOT%" >nul
@@ -43,6 +48,30 @@ if not exist "%ROOT%server\node_modules\.prisma\client\index.js" (
 	popd >nul
 ) else (
 	echo Prisma client already generated.
+)
+
+echo Applying database migrations (if needed)...
+pushd "%ROOT%" >nul
+call npm exec --workspace server prisma migrate deploy
+if errorlevel 1 (
+	popd >nul
+	echo [ERROR] Prisma migrations failed.
+	goto :error
+)
+popd >nul
+
+if %NEED_SEED%==1 (
+	echo Seeding SQLite database with sample data...
+	pushd "%ROOT%" >nul
+	call npm run seed --workspace server
+	if errorlevel 1 (
+		popd >nul
+		echo [ERROR] Database seed failed.
+		goto :error
+	)
+	popd >nul
+) else (
+	echo SQLite database already present. Skipping seed.
 )
 
 if not exist "%ROOT%server\.env" (
