@@ -31,6 +31,20 @@ if not exist "%ROOT%node_modules" (
 	echo Dependencies already installed. Skipping npm install.
 )
 
+if not exist "%ROOT%server\node_modules\.prisma\client\index.js" (
+	echo Generating Prisma client...
+	pushd "%ROOT%" >nul
+	call npm exec --workspace server prisma generate
+	if errorlevel 1 (
+		popd >nul
+		echo [ERROR] Prisma client generation failed.
+		goto :error
+	)
+	popd >nul
+) else (
+	echo Prisma client already generated.
+)
+
 if not exist "%ROOT%server\.env" (
 	echo Creating server\.env from template...
 	if exist "%ROOT%server\.env.example" (
