@@ -1,6 +1,6 @@
 # AMS – School Attendance Management System
 
-This monorepo hosts a full-stack School Attendance Management Dashboard with an admin and teacher experience. The frontend is built with React (Vite + TypeScript + Tailwind CSS) and the backend uses Express, TypeScript, Prisma, and PostgreSQL.
+This monorepo hosts a full-stack School Attendance Management Dashboard with an admin and teacher experience. The frontend is built with React (Vite + TypeScript + Tailwind CSS) and the backend uses Express, TypeScript, Prisma, and SQLite (through Prisma).
 
 ## Project Structure
 
@@ -16,7 +16,7 @@ This monorepo hosts a full-stack School Attendance Management Dashboard with an 
 
 - Node.js 18.18+
 - npm 9+
-- PostgreSQL 14+
+- PowerShell (pwsh) for the optional helper script (`start.bat`)
 
 ## Getting Started
 
@@ -24,9 +24,22 @@ This monorepo hosts a full-stack School Attendance Management Dashboard with an 
 # install dependencies for both workspaces
 npm install
 
-# run frontend and backend in parallel (in separate terminals)
-npm run dev --workspace=client
-npm run dev --workspace=server
+# generate .env from template (done automatically by start.bat, otherwise copy manually)
+copy server\.env.example server\.env  # Windows
+cp server/.env.example server/.env      # macOS/Linux
+
+# start API and client together
+npm run dev
+
+# or start them individually
+npm run dev:server
+npm run dev:client
 ```
+
+> ℹ️ First-time setup: after the dependencies finish installing, the SQLite database lives at `server/prisma/dev.db`. Run `npm run migrate --workspace server` (if you introduce new schema changes) and `npm run seed --workspace server` to load the default accounts and sample data.
+
+### One-click startup (Windows)
+
+Run `start.bat` from the repository root. It checks that Node/npm/Pwsh are available, installs dependencies if needed, generates `server/.env` from the template, launches both dev servers in separate terminals, and opens the frontend in your browser. The script finishes with a quick health check against `http://localhost:4000/health` so you know the API is reachable.
 
 See the `client/README.md` and `server/README.md` for detailed instructions.

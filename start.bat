@@ -56,6 +56,9 @@ timeout /t 5 /nobreak >nul
 echo Opening browser...
 start http://localhost:5173
 
+echo Verifying backend is reachable on http://localhost:4000/health ...
+pwsh -NoProfile -Command "try { $response = Invoke-WebRequest -Uri 'http://localhost:4000/health' -UseBasicParsing -TimeoutSec 5; if ($response.StatusCode -eq 200) { Write-Host '[OK] Backend responded successfully.' } else { Write-Warning ('[WARN] Backend responded with status ' + $response.StatusCode) } } catch { Write-Error '[ERROR] Backend is not responding. Check the AMS Backend window for details.' }"
+
 goto :EOF
 
 :checkCommand
